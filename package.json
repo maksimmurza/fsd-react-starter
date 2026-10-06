@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "deps:validate": "depcruise src --config .dependency-cruiser.cjs",
+    "deps:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | \"C:/Program Files/Graphviz/bin/dot.exe\" -T png -o deps.png"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -29,6 +31,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "dependency-cruiser": "^18.5.0",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
