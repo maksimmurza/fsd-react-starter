@@ -1,42 +1,69 @@
 # Architecture principles and rules
 
-General application structure/architecture is FSD, but with some enhancements listed below. Terms 'layer', 'slice', etc. have meaning according to the FSD methodogy. The `src` folder can contain only folders: app, entities, features, pages, shared, widgets. All code should be placed inside of listed folders except tooling configuration files that require a specific location to work correctly.
+The frontend follows Feature-Sliced Design with the project conventions below. Application source belongs to these layers under `src`:
 
-Import scheme: shared -> entities -> features -> widgets -> pages -> app. 
+```text
+src/
+  app/       # Entrypoint, layouts, providers, and global styles
+  pages/     # Page composition
+  widgets/   # Independent composite UI blocks
+  features/  # User operations
+  entities/  # Domain models and their base operations
+  shared/    # Reusable infrastructure, UI, and utilities
+```
 
-All layers from the right part of the scheme can import layers from the left, import in opposite direction is a violation and should be restricted by linter rules.
+Tooling configuration files may use the locations required by their tools.
 
-Slices shouldn't have imports between themselves (for example one feature can not import another).
+## Dependency boundaries
 
-### shared folder
+The dependency direction is `app → pages → widgets → features → entities → shared`. A layer may import from layers below it, never above it. Slices within one layer must not import one another, including type-only imports. `app` and `shared` are organized into segments rather than slices.
 
-Mostly (but not strictly) code detached from the project / business specifics. Most common frontend application functionality.
+Compose entity types in upper layers. If a reusable entity needs another entity's fields, accept a constrained generic requiring only the fields it needs instead of importing the sibling slice.
 
-Application configuration must be centralized in `shared/config`. Other layers and slices, including widgets, must consume it through this module's public API instead of defining their own `config` segments. This is a project-specific convention. Tooling configuration files follow the locations required by their tools.
+Use each slice's public `index.ts`. Root slice indexes re-export public segment indexes with `export *`; segment indexes re-export only their own modules. Cross-segment imports within a slice go through the target segment's index. Schema imports may reference the named model file directly to avoid barrel cycles. Index files contain only re-exports.
 
-### entities folder
+See [conventions](conventions.md) for naming, imports, styling, and code-quality rules. Enforce dependency boundaries and public APIs with automated checks where supported; review rules that are not covered by those checks.
 
-The main goal of this layer is to define the model of the entity and provide API for mutating entities state. Set of primitive operations with them - the "base" for building more complicated functionality in the next layers (features, etc.)
+## Layer responsibilities
 
-### features folder
+### Shared
 
-Feature by itself - is an operation under the specific entity(-ies).
+`shared/api` owns the shared HTTP client and reusable request infrastructure. Static application configuration is centralized in named modules under `shared/config`. Other layers consume this configuration instead of defining their own `config` segments.
 
-Features are not strictly based on the existed entities. They can introduce the new ones. Because not all entities are related to domain specific, some of them can be related just to UI layer.
+Environment-backed values belong in the single `shared/constants/environment.ts` module. Public website links belong in `shared/constants/links.ts`. These modules are introduced when needed; environment reads are kept separate from static configuration.
 
-### widgets folder
+`shared/components` exposes reusable UI primitives. `shared/lib` holds generic utilities in named files. When runtime validation is used, `shared/model` contains reusable schemas in named files without imports from domain slices.
 
-Widgets are self-contained UI blocks that compose lower-layer modules into a cohesive user flow or a reusable part of a page.
+`shared/index.ts` composes public group indexes. Other layers combine shared dependencies in one import from `@/shared`. Modules inside `shared` use relative imports to avoid root-barrel cycles.
 
-Keep helpers and state specific to the widget inside its slice; reuse entity models and operations from `entities` instead of duplicating them.
+### Entities
 
-UI used only on one page may stay in that page's slice. Extract it into a widget when it forms an independent block or is reused across pages.
+Entity slices own domain types, base operations, and entity state. Put runtime schemas directly in named files under `model` and infer validated data types from those schemas. Entity slices do not own feature requests or import sibling slices.
 
-### pages folder
+### Features
 
-This folder should contain pages - big building blocks of our application.
+Feature slices implement user operations. Presentation, feature state and orchestration, and feature-specific requests belong in the corresponding FSD segments.
 
-### app folder
+Separate server-state queries from transport-level request functions: queries belong in `api/queries` and request functions in `api/requests`, with public indexes for both groups. Model indexes re-export named schema modules. Within a slice, API modules may import a schema directly from its model file to avoid hooks and API dependencies exported by `model/index.ts`.
 
-This folder is responsible for application initialization and providers. It contains the entrypoint - main.tsx file. Folders: layouts, styles, routing, store (it depends of the project specific state management mechanism). They can be created if needed.
+Do not create nested `schemas` or `validation` directories under a model segment. A feature's `lib` segment is domain-agnostic and must not import its `model` segment. Model code may consume library helpers.
 
+### Widgets and pages
+
+Widgets compose lower layers into independent UI blocks. Keep helpers and state specific to the widget inside its slice; reuse entity models and operations instead of duplicating them.
+
+Pages compose widgets and lower-layer slices into screens. UI used only on one page may stay in that page's `ui` segment; extract it into a widget when reused or independently meaningful. Pages may coordinate independent features without making those features import one another.
+
+### App
+
+`app/main.tsx` composes application providers. Application layouts belong in `app/layouts`, global styles in `app/styles`. Create providers and other application infrastructure when needed.
+
+Keep route definitions, navigation paths, router initialization, and the routing provider together in a named module under `app/providers`, without separate routing or path modules. Supply navigation destinations to lower layers through props.
+
+Initialize the server-state cache and any configured persistence infrastructure in an application provider. Keep the cache client stable for the application lifetime. Queries access it through the provided cache API rather than importing app modules.
+
+## Documentation boundaries
+
+This document describes project structure and dependencies. Code conventions belong in [conventions.md](conventions.md), user behavior and feature flows in [features/](features/), and product decisions in [product.md](product.md).
+
+Introduce request, routing, validation, and persistence modules when the project needs those capabilities. Do not create empty implementation modules merely to reproduce the structure described here.
